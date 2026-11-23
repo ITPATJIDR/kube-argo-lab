@@ -1,0 +1,10 @@
+# Argo Rollouts — chart argo/argo-rollouts 2.43.12 (app v1.10.2)
+# Controller + CRDs + dashboard (no login — lab only).
+
+dashboard:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - argo-rollouts.localhost

@@ -21,5 +21,13 @@ spec:
         value: ${REPO_URL}
       - name: revision
         value: ${REV}
+      # Passed explicitly (not left to template defaults) so that "Retry" in the UI
+      # still resolves them — Argo does not re-apply template defaults on retry.
+      - name: app-dir
+        value: application
+      - name: push-registry
+        value: registry.registry.svc.cluster.local:5000
+      - name: argocd-app
+        value: shop
 YAML
 echo "Watch: http://argo-workflows.localhost/workflows/argo"
