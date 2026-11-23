@@ -1,12 +1,29 @@
-apiVersion: apps/v1
-kind: Deployment
+# frontend is an Argo Rollout (canary) instead of a Deployment.
+# Traffic split is done by Traefik: Argo Rollouts rewrites the weights in
+# TraefikService "frontend-split" (see frontend-traffic.yaml) at each step.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: frontend
   labels: { app: frontend }
 spec:
-  replicas: 1
+  replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels: { app: frontend }
+  strategy:
+    canary:
+      stableService: frontend-stable
+      canaryService: frontend-canary
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: frontend-split
+      steps:
+        - setWeight: 10
+        - pause: {}                 # wait for manual Promote
+        - setWeight: 50
+        - pause: { duration: 30s }
+        # then 100% automatically
   template:
     metadata:
       labels: { app: frontend }
@@ -29,10 +46,22 @@ spec:
             requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: 500m, memory: 256Mi }
 ---
+# Argo Rollouts adds a pod-template-hash selector to each service at runtime
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend
+  name: frontend-stable
+  labels: { app: frontend }
+spec:
+  selector: { app: frontend }
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-canary
   labels: { app: frontend }
 spec:
   selector: { app: frontend }

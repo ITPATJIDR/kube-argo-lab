@@ -18,3 +18,11 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+  # Argo Rollouts changes these weights during a canary — don't treat that as drift
+  ignoreDifferences:
+    - group: traefik.io
+      kind: TraefikService
+      name: frontend-split
+      jqPathExpressions:
+        - .spec.weighted.services[].weight

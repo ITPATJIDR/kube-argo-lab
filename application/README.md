@@ -1,8 +1,8 @@
 # Gosoft Lab Shop — microservices demo
 
 ```
-browser ──► Traefik ingress (shop.localhost)
-              └─► frontend (nginx :8080)  static SPA + reverse proxy
+browser ──► Traefik IngressRoute (shop.localhost) ─► TraefikService frontend-split (stable/canary weights)
+              └─► frontend (nginx :8080, Argo Rollout canary)  static SPA + reverse proxy
                     ├─ /api/auth/*     ─► auth     (Go       :8080)
                     ├─ /api/products*  ─► products (Ruby     :4567)
                     └─ /api/search*    ─► search   (Python   :8000) ─► products
@@ -26,7 +26,8 @@ application/
 │   ├── auth/            Go
 │   ├── products/        Ruby
 │   └── search/          Python
-├── k8s/                 kustomize: namespace shop, 4 Deployments+Services, Ingress, auth Secret
+├── k8s/                 kustomize: namespace shop, 3 Deployments + frontend Rollout, Services,
+│                        TraefikService/IngressRoute (frontend-traffic.yaml), auth Secret
 └── build.sh             podman build all + export dist/shop-images.tar
 ```
 
@@ -54,6 +55,12 @@ podman run -d --pod shop -e AUTH_HOST=127.0.0.1:8081 -e PRODUCTS_HOST=127.0.0.1:
   -e SEARCH_HOST=127.0.0.1:8000 localhost/shop-frontend:0.1.0
 # http://localhost:18080   — cleanup: podman pod rm -f shop
 ```
+
+## Canary (frontend)
+
+`frontend` is an Argo Rollout: 10% → pause (manual Promote) → 50% → 30s → 100%.
+Watch/promote at http://argo-rollouts.localhost or
+`kubectl argo rollouts get rollout frontend -n shop --watch` / `kubectl argo rollouts promote frontend -n shop`.
 
 ## Notes (lab only)
 
