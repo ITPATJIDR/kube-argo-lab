@@ -18,13 +18,13 @@ generatorOptions:
 images:
   - name: shop-auth
     newName: localhost:30500/shop-auth
-    newTag: "e1cfd0e3"
+    newTag: "ae479644"
   - name: shop-products
     newName: localhost:30500/shop-products
-    newTag: "e1cfd0e3"
+    newTag: "ae479644"
   - name: shop-search
     newName: localhost:30500/shop-search
-    newTag: "e1cfd0e3"
+    newTag: "ae479644"
   - name: shop-frontend
     newName: localhost:30500/shop-frontend
-    newTag: "e1cfd0e3"
+    newTag: "ae479644"
