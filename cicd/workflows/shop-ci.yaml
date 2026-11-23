@@ -1,0 +1,217 @@
+# CI/CD pipeline for the shop app:
+#   checkout ─► test (go / python / ruby, parallel) ─► build+push 4 images (kaniko, parallel)
+#            ─► bump image tags in application/k8s/kustomization.yaml + git push
+#            ─► refresh Argo CD app and wait until Synced & Healthy
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: shop-ci
+  namespace: argo
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: pipeline
+  ttlStrategy:
+    secondsAfterCompletion: 86400
+  arguments:
+    parameters:
+      - name: repo-url
+        description: "HTTPS URL of the GitHub repo, e.g. https://github.com/OWNER/REPO.git"
+      - name: revision
+        value: main
+      - name: app-dir
+        description: "Path of the application inside the repo"
+        value: application
+      - name: push-registry
+        value: registry.registry.svc.cluster.local:5000
+      - name: argocd-app
+        value: shop
+
+  volumeClaimTemplates:
+    - metadata:
+        name: work
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi
+
+  templates:
+    - name: pipeline
+      dag:
+        tasks:
+          - name: checkout
+            template: checkout
+          - name: test-auth
+            template: test-auth
+            dependencies: [checkout]
+          - name: test-search
+            template: test-search
+            dependencies: [checkout]
+          - name: test-products
+            template: test-products
+            dependencies: [checkout]
+          - name: build
+            template: kaniko
+            dependencies: [test-auth, test-search, test-products]
+            arguments:
+              parameters:
+                - name: image
+                  value: "{{item.image}}"
+                - name: context
+                  value: "{{item.context}}"
+                - name: tag
+                  value: "{{tasks.checkout.outputs.parameters.sha}}"
+            withItems:
+              - { image: shop-auth,     context: services/auth }
+              - { image: shop-products, context: services/products }
+              - { image: shop-search,   context: services/search }
+              - { image: shop-frontend, context: frontend }
+          - name: bump-tags
+            template: bump-tags
+            dependencies: [build]
+            arguments:
+              parameters:
+                - name: tag
+                  value: "{{tasks.checkout.outputs.parameters.sha}}"
+          - name: deploy
+            template: argocd-sync
+            dependencies: [bump-tags]
+
+    # ---------------------------------------------------------------- checkout
+    - name: checkout
+      outputs:
+        parameters:
+          - name: sha
+            valueFrom:
+              path: /tmp/sha
+      container:
+        image: docker.io/alpine/git:2.47.2
+        command: [sh, -ec]
+        args:
+          - |
+            url="{{workflow.parameters.repo-url}}"
+            if [ -n "$GIT_TOKEN" ]; then
+              url=$(echo "$url" | sed "s#https://#https://${GIT_USERNAME}:${GIT_TOKEN}@#")
+            fi
+            rm -rf /work/src
+            git clone --depth 1 --branch "{{workflow.parameters.revision}}" "$url" /work/src
+            cd /work/src
+            git rev-parse --short=8 HEAD | tr -d '\n' > /tmp/sha
+            echo "commit: $(cat /tmp/sha) — $(git log -1 --pretty=%s)"
+        env: &git-env
+          - name: GIT_USERNAME
+            valueFrom:
+              secretKeyRef: { name: github-credentials, key: username, optional: true }
+          - name: GIT_TOKEN
+            valueFrom:
+              secretKeyRef: { name: github-credentials, key: token, optional: true }
+        volumeMounts: &work
+          - name: work
+            mountPath: /work
+
+    # ---------------------------------------------------------------- tests
+    - name: test-auth
+      container:
+        image: docker.io/library/golang:1.23-alpine
+        command: [sh, -ec]
+        workingDir: "/work/src/{{workflow.parameters.app-dir}}/services/auth"
+        args:
+          - |
+            export GOCACHE=/tmp/gocache CGO_ENABLED=0
+            test -z "$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; exit 1; }
+            go vet ./...
+            go build -o /tmp/auth .
+            echo "auth: OK"
+        volumeMounts: *work
+
+    - name: test-search
+      container:
+        image: docker.io/library/python:3.12-slim
+        command: [sh, -ec]
+        workingDir: "/work/src/{{workflow.parameters.app-dir}}/services/search"
+        args:
+          - |
+            pip install -q --no-cache-dir --root-user-action=ignore -r requirements.txt
+            python -B -c "
+            from fastapi.testclient import TestClient
+            import main
+            r = TestClient(main.app).get('/healthz')
+            assert r.status_code == 200 and r.json()['service'] == 'search', r.text
+            print('search: OK')
+            "
+        volumeMounts: *work
+
+    - name: test-products
+      container:
+        image: docker.io/library/ruby:3.3-slim
+        command: [sh, -ec]
+        workingDir: "/work/src/{{workflow.parameters.app-dir}}/services/products"
+        args:
+          - |
+            ruby -c app.rb
+            ruby -rjson -e 'd = JSON.parse(File.read("products.json")); abort "empty catalog" if d.empty?; puts "products: OK (#{d.size} items)"'
+        volumeMounts: *work
+
+    # ---------------------------------------------------------------- build
+    - name: kaniko
+      inputs:
+        parameters:
+          - name: image
+          - name: context
+          - name: tag
+      container:
+        image: gcr.io/kaniko-project/executor:v1.23.2
+        args:
+          - --context=dir:///work/src/{{workflow.parameters.app-dir}}/{{inputs.parameters.context}}
+          - --destination={{workflow.parameters.push-registry}}/{{inputs.parameters.image}}:{{inputs.parameters.tag}}
+          - --insecure
+          - --cache=true
+          - --cache-repo={{workflow.parameters.push-registry}}/cache
+          - --snapshot-mode=redo
+        volumeMounts: *work
+        resources:
+          requests: { cpu: 200m, memory: 512Mi }
+
+    # ---------------------------------------------------------------- gitops
+    - name: bump-tags
+      inputs:
+        parameters:
+          - name: tag
+      container:
+        image: docker.io/alpine/git:2.47.2
+        command: [sh, -ec]
+        workingDir: /work/src
+        args:
+          - |
+            TAG="{{inputs.parameters.tag}}"
+            K="{{workflow.parameters.app-dir}}/k8s/kustomization.yaml"
+            git config user.name  "argo-workflows"
+            git config user.email "argo-workflows@localhost"
+            git fetch --depth 1 origin "{{workflow.parameters.revision}}"
+            git checkout -B ci-bump FETCH_HEAD
+            for img in shop-auth shop-products shop-search shop-frontend; do
+              sed -i "/name: ${img}\$/,/newTag:/ s/newTag: .*/newTag: \"${TAG}\"/" "$K"
+            done
+            git --no-pager diff --stat
+            if git diff --quiet; then echo "tags already at $TAG"; exit 0; fi
+            git commit -am "ci: deploy shop images ${TAG} [skip ci]"
+            git push origin "HEAD:{{workflow.parameters.revision}}"
+        env: *git-env
+        volumeMounts: *work
+
+    - name: argocd-sync
+      container:
+        image: docker.io/alpine/k8s:1.31.4
+        command: [sh, -ec]
+        args:
+          - |
+            APP="{{workflow.parameters.argocd-app}}"
+            kubectl -n argocd annotate application "$APP" argocd.argoproj.io/refresh=hard --overwrite
+            for i in $(seq 1 60); do
+              st=$(kubectl -n argocd get application "$APP" -o jsonpath='{.status.sync.status}/{.status.health.status}/{.status.sync.revision}')
+              echo "[$i] $st"
+              case "$st" in Synced/Healthy/*) echo "deployed"; exit 0;; esac
+              sleep 5
+            done
+            echo "timed out waiting for Argo CD"; exit 1

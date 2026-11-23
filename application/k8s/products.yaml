@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: products
+  labels: { app: products }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: products }
+  template:
+    metadata:
+      labels: { app: products }
+    spec:
+      containers:
+        - name: products
+          image: shop-products
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4567
+          readinessProbe:
+            httpGet: { path: /healthz, port: 4567 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 4567 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: products
+  labels: { app: products }
+spec:
+  selector: { app: products }
+  ports:
+    - port: 4567
+      targetPort: 4567

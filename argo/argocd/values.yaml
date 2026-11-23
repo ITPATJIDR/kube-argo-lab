@@ -1,0 +1,19 @@
+# Argo CD — chart argo/argo-cd 10.18.2 (app v3.6.2)
+# Lab setup on k3s: single replica, exposed via k3s Traefik ingress over plain HTTP.
+
+global:
+  domain: argocd.localhost
+
+configs:
+  params:
+    # TLS is terminated (or skipped) at the ingress, so argocd-server serves HTTP
+    server.insecure: true
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+
+# Not needed for a local lab (no SSO)
+dex:
+  enabled: false

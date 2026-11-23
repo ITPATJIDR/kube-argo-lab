@@ -1,0 +1,10 @@
+[
+  { "id": 1, "name": "Mechanical Keyboard", "category": "Accessories", "price": 3290, "description": "75% hot-swap keyboard with brown switches" },
+  { "id": 2, "name": "Wireless Mouse", "category": "Accessories", "price": 890, "description": "Ergonomic mouse with silent clicks" },
+  { "id": 3, "name": "27\" 4K Monitor", "category": "Displays", "price": 11900, "description": "IPS panel, USB-C 65W power delivery" },
+  { "id": 4, "name": "Portable SSD 1TB", "category": "Storage", "price": 2790, "description": "USB 3.2 Gen 2, up to 1050 MB/s" },
+  { "id": 5, "name": "Noise Cancelling Headphones", "category": "Audio", "price": 7490, "description": "Over-ear, 30h battery, ANC" },
+  { "id": 6, "name": "USB-C Hub", "category": "Accessories", "price": 1290, "description": "7-in-1 hub with HDMI and SD card reader" },
+  { "id": 7, "name": "Webcam 1080p", "category": "Video", "price": 1590, "description": "Full HD webcam with dual microphones" },
+  { "id": 8, "name": "NAS 2-Bay", "category": "Storage", "price": 8990, "description": "Home NAS for backups and media streaming" }
+]

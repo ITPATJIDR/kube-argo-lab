@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: shop
+resources:
+  - namespace.yaml
+  - auth.yaml
+  - products.yaml
+  - search.yaml
+  - frontend.yaml
+  - ingress.yaml
+secretGenerator:
+  - name: auth-secret
+    literals:
+      - AUTH_SECRET=lab-only-change-me
+generatorOptions:
+  disableNameSuffixHash: true
+# Image tags are bumped by the Argo Workflows pipeline (cicd/workflows/shop-ci.yaml)
+images:
+  - name: shop-auth
+    newName: localhost:30500/shop-auth
+    newTag: "0.1.0"
+  - name: shop-products
+    newName: localhost:30500/shop-products
+    newTag: "0.1.0"
+  - name: shop-search
+    newName: localhost:30500/shop-search
+    newTag: "0.1.0"
+  - name: shop-frontend
+    newName: localhost:30500/shop-frontend
+    newTag: "0.1.0"

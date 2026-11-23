@@ -1,0 +1,24 @@
+# Argo Workflows — chart argo/argo-workflows 2.0.18 (app v4.1.6)
+# Lab setup on k3s: UI without login, exposed via k3s Traefik ingress.
+
+controller:
+  # Namespaces where workflows run (SA + RBAC are created here)
+  workflowNamespaces:
+    - argo
+
+workflow:
+  serviceAccount:
+    # Creates SA "argo-workflow" used to run workflow pods
+    create: true
+  rbac:
+    create: true
+
+server:
+  # "server" mode = no login in the UI. Lab only — do not use on shared clusters.
+  authModes:
+    - server
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - argo-workflows.localhost
