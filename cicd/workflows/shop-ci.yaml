@@ -184,6 +184,8 @@ spec:
         workingDir: /work/src
         args:
           - |
+            [ -n "$GIT_TOKEN" ] || { echo "secret argo/github-credentials (username, token) is required to push tag bumps"; exit 1; }
+            git remote set-url origin "$(git remote get-url origin | sed -E "s#https://([^@]*@)?#https://${GIT_USERNAME}:${GIT_TOKEN}@#")"
             TAG="{{inputs.parameters.tag}}"
             K="{{workflow.parameters.app-dir}}/k8s/kustomization.yaml"
             git config user.name  "argo-workflows"
