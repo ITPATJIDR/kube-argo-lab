@@ -22,7 +22,7 @@ spec:
         - setWeight: 10
         - pause: {}                 # wait for manual Promote
         - setWeight: 50
-        - pause: { duration: 30s }
+        - pause: {}
         # then 100% automatically
   template:
     metadata:
